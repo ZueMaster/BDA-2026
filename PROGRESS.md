@@ -19,6 +19,7 @@ How fast do different car models lose value, and how much of the price is explai
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **(proposed)** Revise the weakly informative priors for M1: β_age, β_mil ~ Normal(0, 0.1), β_eng ~ Normal(0, 0.3), σ ~ HalfNormal(0.5) | The original set failed the prior predictive check (16% of simulated prices outside £500–£200k). See Results. |
 | 2026-11-04 | Separate held-out test set of 10,000 rows, disjoint from the training set | Gives an honest out-of-sample accuracy measure (error in £) in addition to LOO. Used only once, at the end. |
 | 2026-11-04 | Cleaning rules below agreed | See the table under Data. |
 | 2026-11-04 | Simple random sample of 10,000 rows with a fixed seed | Everyone works on the same data, and the real brand/model mix is kept. |
@@ -94,20 +95,22 @@ Age and mileage are centred so that the intercept is the log-price of a typical 
 | Parameter | Vague | **Weakly informative (main)** | Informative |
 |---|---|---|---|
 | α (intercept, typical car) | Normal(9.5, 10) | **Normal(9.5, 1)** | Normal(9.5, 0.5) |
-| β_age (per year) | Normal(0, 10) | **Normal(0, 0.5)** | Normal(−0.15, 0.05) |
-| β_mil (per 10k miles) | Normal(0, 10) | **Normal(0, 0.5)** | Normal(−0.05, 0.05) |
-| β_eng (per litre) | Normal(0, 10) | **Normal(0, 0.5)** | Normal(0.2, 0.2) |
+| β_age (per year) | Normal(0, 10) | **Normal(0, 0.1)** ~~0.5~~ | Normal(−0.15, 0.05) |
+| β_mil (per 10k miles) | Normal(0, 10) | **Normal(0, 0.1)** ~~0.5~~ | Normal(−0.05, 0.05) |
+| β_eng (per litre) | Normal(0, 10) | **Normal(0, 0.3)** ~~0.5~~ | Normal(0.2, 0.2) |
 | Fuel / transmission levels | Normal(0, 10) | **Normal(0, 0.5)** | Normal(0, 0.25) |
-| σ (residual sd) | HalfNormal(10) | **Exponential(1)** | HalfNormal(0.5) |
+| σ (residual sd) | HalfNormal(10) | **HalfNormal(0.5)** ~~Exponential(1)~~ | HalfNormal(0.25) ~~0.5~~ |
 | Group sds (M2–M4, intercepts) | HalfNormal(5) | **HalfNormal(0.5)** | HalfNormal(0.25) |
 | Age-slope sd (M4) | HalfNormal(1) | **HalfNormal(0.1)** | HalfNormal(0.05) |
+
+Struck-through values are the original, agreed priors, replaced after the prior predictive check (proposed). The group-level sds for M2–M4 haven't been checked yet: they get the same treatment when those models are built.
 
 The informative centres are domain guesses ("cars lose ~15% a year", "bigger engines cost a bit more"), not estimates from this data.
 The β_mil informative prior (−0.05 per 10k miles) happens to match the least-squares estimate (−0.048). Justify it from an outside source, or change it, so that it isn't using the data twice.
 
 | Model | Formula (Bambi) | Status |
 |---|---|---|
-| M1 pooled | `log_price ~ age + mileage + engineSize + fuelType + transmission` | not started |
+| M1 pooled | `log_price ~ age_c + mileage_10k_c + engineSize_c + fuelType + transmission` | priors + prior predictive check done (`notebooks/02_m1_pooled.ipynb`) |
 | M2 brand | `... + (1 \| brand)` | not started |
 | M3 brand/model | `... + (1 \| brand) + (1 \| brand:model)` | not started |
 | M4 varying slopes | `... + (1 + age \| brand) + (1 + age \| brand:model)` | not started |
@@ -125,10 +128,22 @@ The β_mil informative prior (−0.05 per 10k miles) happens to match the least-
 
 ## Results
 
-_Nothing yet._
+### M1: prior predictive check (2026-11-04, `notebooks/02_m1_pooled.ipynb`)
+
+Prices simulated from the priors only (1,000 draws × training-set cars), compared with a plausible range of £500–£200k. That range comes from general knowledge, not from the data.
+
+| | 5% | median | 95% | < £500 | > £200k |
+|---|---|---|---|---|---|
+| Version 1 (agreed) | £334 | £13,048 | £569,076 | 6.6% | 9.9% |
+| Version 2 (revised) | £1,593 | £13,085 | £115,779 | 0.7% | 2.3% |
+
+- **Version 1 failed.** The slope sd of 0.5 is per unit, but centred age reaches +12 and centred mileage +19, so a single draw can shift log-price by 6 or more (a factor of 400). The implied depreciation curves show 15-year-old cars worth pennies or millions.
+- **Version 2 passes** and is still centred on 0, so it doesn't favour any direction.
+- **Lesson for the report:** set slope priors relative to the predictor's range, not just "per unit". Revising after a prior predictive check is fine because the check never uses observed prices.
 
 ## Open questions
 
+- PyTensor warns that it can't find BLAS (installed via pip), so sampling may be slow. If M1 sampling is slow, install a BLAS or use conda-forge.
 - Full three-prior refit for every model, or `priorsense` power-scaling for all and full refits only for the final model? Ask in a TA session.
 
 ## AI use log
@@ -138,4 +153,4 @@ Required for the report (Aalto AI guidelines, points 5 and 6).
 | Date | Tool | What it was used for |
 |---|---|---|
 | 2026-10-20 | Claude Code | Data loader (`src/data.py`) and first EDA notebook |
-| 2026-11-04 | Claude Code | `prepare()` / `train_test()` in `src/data.py`, mileage transform check, data-structure summary, discussing prior options, cleaning proposal, this progress file |
+| 2026-11-04 | Claude Code | M1 prior notebook (`02_m1_pooled.ipynb`): priors, prior predictive check, figures. `prepare()` / `train_test()` in `src/data.py`, mileage transform check, data-structure summary, discussing prior options, cleaning proposal, this progress file |
