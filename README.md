@@ -20,7 +20,17 @@ df = load()  # ~97.7k rows: model, year, price, transmission, mileage, fuelType,
 ```
 
 `src/data.py` combines the nine per-brand CSVs and applies basic cleaning: it strips model names, drops exact
-duplicates and an impossible year (2060), and treats `engineSize == 0` as missing. The dataset's `cclass.csv`,
+duplicates and an impossible year (2060), and treats `engineSize == 0` as missing.
+
+For modelling, use the fixed training and test samples:
+
+```python
+from src.data import train_test
+train, test = train_test()  # two disjoint 10k-row samples, seed 2026
+```
+
+`prepare()` applies the modelling rules from `PROGRESS.md` (age ≤ 15, known engine size, no Other/Electric fuel or Other
+transmission) and adds `log_price` and `mileage_10k`. The dataset's `cclass.csv`,
 `focus.csv` and `unclean *.csv` files are skipped because they mostly duplicate the Mercedes and Ford files.
 
 ## Notebooks
