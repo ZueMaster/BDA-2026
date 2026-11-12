@@ -110,7 +110,7 @@ The β_mil informative prior (−0.05 per 10k miles) happens to match the least-
 
 | Model | Formula (Bambi) | Status |
 |---|---|---|
-| M1 pooled | `log_price ~ age_c + mileage_10k_c + engineSize_c + fuelType + transmission` | priors + prior predictive check done (`notebooks/02_m1_pooled.ipynb`) |
+| M1 pooled | `log_price ~ age_c + mileage_10k_c + engineSize_c + fuelType + transmission` | full loop complete: priors, sampling, convergence, PPC, sensitivity (`notebooks/02_m1_pooled.ipynb`) |
 | M2 brand | `... + (1 \| brand)` | not started |
 | M3 brand/model | `... + (1 \| brand) + (1 \| brand:model)` | not started |
 | M4 varying slopes | `... + (1 + age \| brand) + (1 + age \| brand:model)` | not started |
@@ -118,13 +118,34 @@ The β_mil informative prior (−0.05 per 10k miles) happens to match the least-
 
 ### Checklist for every model
 
-- [ ] Priors written down (including any Bambi defaults left unchanged)
-- [ ] Prior predictive check: simulated prices plausible?
-- [ ] MCMC: settings recorded (chains, draws, tune, target_accept, seed)
-- [ ] Convergence: R-hat, ESS, divergences
-- [ ] Posterior predictive check: overall, per brand, tails
-- [ ] Sensitivity: refit with vague + informative priors (or `priorsense`), and check whether key results change
-- [ ] Results noted below
+- [x] Priors written down (including any Bambi defaults left unchanged)
+- [x] Prior predictive check: simulated prices plausible?
+- [x] MCMC: settings recorded (chains, draws, tune, target_accept, seed)
+- [x] Convergence: R-hat, ESS, divergences
+- [x] Posterior predictive check: overall, per brand, tails
+- [x] Sensitivity: refit with vague + informative priors (or `priorsense`), and check whether key results change
+- [x] Results noted below
+
+
+### M1: full Bayesian workflow results (2026-11-12, `notebooks/02_m1_pooled.ipynb`)
+
+- **Sampling:** 4 chains, 1,000 draws, 1,000 tune, `target_accept=0.9`, seed 2026. Runtime 85s (~40 draws/s with Numba).
+- **Convergence:** $\widehat{R} = 1.00$ for all parameters, Bulk ESS > 2,000 (min 2,015 on Intercept), Tail ESS > 2,200. Zero divergent transitions. Rank plots show uniform mixing across all 4 chains.
+- **Key posterior parameter estimates:**
+  - $\alpha = 9.725 \pm 0.006$ (median price of typical car $\approx £16,730$).
+  - $\beta_{\text{age}} = -0.124 \pm 0.002$ (-11.7% depreciation per year).
+  - $\beta_{\text{mil}} = -0.045 \pm 0.002$ (-4.4% depreciation per 10,000 miles, closely matching OLS check of -4.7%).
+  - $\beta_{\text{eng}} = +0.466 \pm 0.005$ (+59.4% per litre engine size).
+  - Manual discount: $\beta_{\text{Manual}} = -0.216 \pm 0.007$ (-19.4% vs Automatic).
+  - Residual sd $\sigma = 0.224 \pm 0.002$.
+- **Posterior predictive checks:**
+  - Overall distribution matches the observed log-price mode well.
+  - Tail check: underpredicts slightly in the extreme high end (> £50k: 1.4% observed vs 0.7% simulated).
+  - **Per-brand check (crucial):** M1 has massive systematic bias across brands: underpredicts Mercedes (+20.3%), BMW (+16.8%), Audi (+13.5%), and overpredicts Vauxhall (-20.8%) and Hyundai (-16.4%). This strongly motivates **M2 (brand-level varying intercepts)**.
+- **Prior sensitivity:**
+  - Refit with Vague and Informative priors from the table.
+  - Posterior means across all three prior specifications are identical to 3 decimal places (e.g. $\beta_{\text{age}} = -0.124$, $\beta_{\text{mil}} = -0.045$).
+  - With $N = 10,000$, the data dominates the likelihood; the weakly informative prior successfully regularizes prior predictive draws without biasing posterior estimates.
 
 ## Results
 
@@ -154,3 +175,4 @@ Required for the report (Aalto AI guidelines, points 5 and 6).
 |---|---|---|
 | 2026-10-20 | Claude Code | Data loader (`src/data.py`) and first EDA notebook |
 | 2026-11-04 | Claude Code | M1 prior notebook (`02_m1_pooled.ipynb`): priors, prior predictive check, figures. `prepare()` / `train_test()` in `src/data.py`, mileage transform check, data-structure summary, discussing prior options, cleaning proposal, this progress file |
+| 2026-11-12 | Antigravity | M1 baseline model completion (`02_m1_pooled.ipynb`): MCMC sampling (NUTS via Bambi/PyMC), convergence diagnostics (R-hat, ESS, divergences, rank plots), posterior predictive checks (overall, tails, brand bias), prior sensitivity refits (vague vs. informative), Numba compilation setup for pointwise log-likelihood, updating progress checklist and results |
