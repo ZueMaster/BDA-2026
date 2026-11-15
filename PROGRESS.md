@@ -111,7 +111,7 @@ The β_mil informative prior (−0.05 per 10k miles) happens to match the least-
 | Model | Formula (Bambi) | Status |
 |---|---|---|
 | M1 pooled | `log_price ~ age_c + mileage_10k_c + engineSize_c + fuelType + transmission` | full loop complete: priors, sampling, convergence, PPC, sensitivity (`notebooks/02_m1_pooled.ipynb`) |
-| M2 brand | `... + (1 \| brand)` | not started |
+| M2 brand | `... + (1 \| brand)` | full loop complete: priors, sampling, convergence, PPC, sensitivity (`notebooks/03_m2_brand.ipynb`) |
 | M3 brand/model | `... + (1 \| brand) + (1 \| brand:model)` | not started |
 | M4 varying slopes | `... + (1 + age \| brand) + (1 + age \| brand:model)` | not started |
 | M5 (optional) | M4 with Student-t residuals | not started |
@@ -147,6 +147,37 @@ The β_mil informative prior (−0.05 per 10k miles) happens to match the least-
   - Posterior means across all three prior specifications are identical to 3 decimal places (e.g. $\beta_{\text{age}} = -0.124$, $\beta_{\text{mil}} = -0.045$).
   - With $N = 10,000$, the data dominates the likelihood; the weakly informative prior successfully regularizes prior predictive draws without biasing posterior estimates.
 
+### M2: full Bayesian workflow results (2026-11-14, `notebooks/03_m2_brand.ipynb`)
+
+- **Sampling:** 4 chains, 1,000 draws, 1,000 tune, `target_accept=0.95`, `omit_offsets=False`, seed 2026. Runtime ~470s with Numba compilation.
+- **Convergence:** $\widehat{R} \le 1.01$ across all parameters, Bulk ESS > 700 (min 736 on Intercept), Tail ESS > 1,200. Zero divergent transitions. Rank plots show uniform mixing across chains.
+- **Key posterior parameter estimates:**
+  - Grand Intercept: $\alpha = 9.642 \pm 0.069$ (median price of typical baseline vehicle across brands $\approx £15,400$).
+  - $\beta_{\text{age}} = -0.121 \pm 0.001$ (-11.4% depreciation per year).
+  - $\beta_{\text{mil}} = -0.048 \pm 0.001$ (-4.7% depreciation per 10,000 miles).
+  - $\beta_{\text{eng}} = +0.413 \pm 0.004$ (+51.1% per litre engine size).
+  - Manual discount: $\beta_{\text{Manual}} = -0.141 \pm 0.006$ (-13.1% vs Automatic).
+  - Hybrid premium: $\beta_{\text{Hybrid}} = +0.216 \pm 0.013$ (+24.1% vs Petrol).
+  - Brand SD: $\sigma_{\text{brand}} = 0.194 \pm 0.058$.
+  - Residual SD: $\sigma = 0.185 \pm 0.001$.
+  - **Residual variance reduction:** Comparing $\sigma$ in M2 (0.185) vs M1 (0.224) reveals a **31.9% reduction in unexplained variance**, perfectly matching the ~32% $R^2$ explained by brand in EDA.
+- **Brand intercepts & premiums ($\alpha_{\text{brand}}$):**
+  - Audi: $+25.9\%$ ($[+8.8\%, +35.4\%]$ 94% HDI)
+  - Mercedes: $+21.2\%$ ($[+5.4\%, +32.2\%]$)
+  - BMW: $+10.8\%$ ($[-4.0\%, +22.7\%]$)
+  - Volkswagen: $+9.4\%$ ($[-4.6\%, +22.0\%]$)
+  - Ford: $-1.6\%$ ($[-14.2\%, +12.5\%]$)
+  - Skoda: $-5.0\%$ ($[-18.9\%, +7.8\%]$)
+  - Hyundai: $-13.1\%$ ($[-27.9\%, -1.0\%]$)
+  - Toyota: $-16.6\%$ ($[-31.6\%, -5.0\%]$)
+  - Vauxhall: $-19.4\%$ ($[-35.6\%, -9.0\%]$)
+- **Posterior predictive checks:**
+  - Overall distribution and tails (< £2k, > £50k) align closely with observed data.
+  - **Per-brand bias completely eliminated:** While M1 suffered large systematic errors (+18% to -18%), M2 brings mean prediction bias within $[-0.5\%, +0.6\%]$ across all 9 brands (e.g. Mercedes error drops from $+8.9\%$ to $-0.05\%$, Vauxhall from $-18.1\%$ to $-0.01\%$, Audi from $+17.7\%$ to $-0.47\%$).
+- **Prior sensitivity:**
+  - Refit with Vague ($\sigma_{\text{brand}} \sim \text{HalfNormal}(5.0)$) and Informative ($\sigma_{\text{brand}} \sim \text{HalfNormal}(0.25)$) priors.
+  - Posterior parameters remain stable and virtually identical across all 3 specifications: $\sigma = 0.185$ across all, $\sigma_{\text{brand}} = 0.194 \pm 0.01$ across all, slopes identical to 3 decimal places. Data likelihood dominates.
+
 ## Results
 
 ### M1: prior predictive check (2026-11-04, `notebooks/02_m1_pooled.ipynb`)
@@ -176,3 +207,4 @@ Required for the report (Aalto AI guidelines, points 5 and 6).
 | 2026-10-20 | Claude Code | Data loader (`src/data.py`) and first EDA notebook |
 | 2026-11-04 | Claude Code | M1 prior notebook (`02_m1_pooled.ipynb`): priors, prior predictive check, figures. `prepare()` / `train_test()` in `src/data.py`, mileage transform check, data-structure summary, discussing prior options, cleaning proposal, this progress file |
 | 2026-11-12 | Antigravity | M1 baseline model completion (`02_m1_pooled.ipynb`): MCMC sampling (NUTS via Bambi/PyMC), convergence diagnostics (R-hat, ESS, divergences, rank plots), posterior predictive checks (overall, tails, brand bias), prior sensitivity refits (vague vs. informative), Numba compilation setup for pointwise log-likelihood, updating progress checklist and results |
+| 2026-11-14 | Antigravity | M2 hierarchical brand model completion (`03_m2_brand.ipynb`): varying brand intercepts `(1 \| brand)`, prior checks, NUTS MCMC sampling (4 chains, target_accept=0.95, zero divergences), pointwise log-likelihood, forest plots, posterior predictive checks demonstrating elimination of brand bias (reduced from $\pm 18\%$ to $\pm 0.5\%$), 31.9% residual variance reduction, prior sensitivity refits (vague vs. informative), updating progress log |
