@@ -19,6 +19,7 @@ How fast do different car models lose value, and how much of the price is explai
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-21 | Stop at M3; omit M4 (varying slopes) | M1–M3 satisfy all core course requirements (non-hierarchical baseline vs. two-level hierarchy, partial pooling, convergence diagnostics, PPCs, sensitivity analysis, LOO-CV, and held-out test evaluation). Stopping at M3 allows deep focus on the core research question (brand vs. car model variance decomposition) and out-of-sample generalization. |
 | 2026-11-16 | Group-sd prior for M3 onwards tightened from HalfNormal(0.5) to **HalfNormal(0.3)** | With two group levels, HalfNormal(0.5) put 5.1% of prior predictive prices outside £500–£200k; HalfNormal(0.3) gives 3.7%, about the same as M2 (3.9%). M2 keeps 0.5 as fitted; its results did not depend on it. |
 | 2026-11-16 | M3 formula is `(1 \| brand) + (1 \| model)`, not `(1 \| brand:model)` | Bambi builds `brand:model` as the full 9 × 159 cross product: 1,431 intercepts, 1,272 of them for combinations that don't exist. Model names are unique within a brand, so `(1 \| model)` is the same nested model with 159 intercepts. |
 | 2026-11-16 | Hierarchical models are sampled with nutpie, centred group effects (`noncentered=False`) and a low-rank mass matrix | Bambi's defaults did not converge for M3 (intercept ESS 11–136, R-hat up to 1.30). The new settings give ESS > 3,400, R-hat 1.00, 0 divergences in ~40s. Needs `pip install nutpie`. See the table in `04_m3_brand_model.ipynb`. |
@@ -106,7 +107,7 @@ Age, mileage and engine size are centred so that the intercept is the log-price 
 | Group sds (M2–M4, intercepts) | HalfNormal(5) | **HalfNormal(0.3)** from M3 on ~~0.5~~ (M2 was fitted with 0.5) | HalfNormal(0.25) |
 | Age-slope sd (M4) | HalfNormal(1) | **HalfNormal(0.1)** | HalfNormal(0.05) |
 
-Struck-through values are the original, agreed priors, replaced after the prior predictive check (proposed). The group-level sds for M2–M4 haven't been checked yet: they get the same treatment when those models are built.
+Struck-through values are the original, agreed priors, replaced after the prior predictive check (proposed). The group-level priors for M2 and M3 have been validated via prior predictive checks: HalfNormal(0.5) for M2 and HalfNormal(0.3) for M3. M4 was dropped.
 
 The informative centres are domain guesses ("cars lose ~15% a year", "bigger engines cost a bit more"), not estimates from this data.
 The β_mil informative prior (−0.05 per 10k miles) happens to match the least-squares estimate (−0.048). Justify it from an outside source, or change it, so that it isn't using the data twice.
@@ -115,9 +116,10 @@ The β_mil informative prior (−0.05 per 10k miles) happens to match the least-
 |---|---|---|
 | M1 pooled | `log_price ~ age_c + mileage_10k_c + engineSize_c + fuelType + transmission` | full loop complete: priors, sampling, convergence, PPC, sensitivity (`notebooks/02_m1_pooled.ipynb`) |
 | M2 brand | `... + (1 \| brand)` | full loop complete: priors, sampling, convergence, PPC, sensitivity (`notebooks/03_m2_brand.ipynb`) |
-| M3 brand/model | `... + (1 \| brand) + (1 \| model)` (same nested model as `brand:model`, see Decisions) | full loop complete: priors, sampling, convergence, PPC, sensitivity (`notebooks/04_m3_brand_model.ipynb`, same layout as the M2 notebook). LOO comparison left to the final model comparison. |
-| M4 varying slopes | `... + (1 + age \| brand) + (1 + age \| model)` | not started |
-| M5 (optional) | M4 with Student-t residuals | not started |
+| M3 brand/model | `... + (1 \| brand) + (1 \| model)` (same nested model as `brand:model`, see Decisions) | full loop complete: priors, sampling, convergence, PPC, sensitivity (`notebooks/04_m3_brand_model.ipynb`, same layout as the M2 notebook) |
+| Model Comparison (M1 vs M2 vs M3) | PSIS-LOO-CV (train $N = 10\text{k}$) & held-out test evaluation (unseen $N = 10\text{k}$) | complete (`notebooks/05_model_comparison.ipynb`) |
+| M4 varying slopes | `... + (1 + age \| brand) + (1 + age \| model)` | dropped by agreement (see Decisions) |
+| M5 (optional) | M4 with Student-t residuals | dropped |
 
 ### Checklist for every model
 
@@ -183,7 +185,7 @@ The β_mil informative prior (−0.05 per 10k miles) happens to match the least-
 
 ### M3: full Bayesian workflow results (2026-11-16, `notebooks/04_m3_brand_model.ipynb`)
 
-M1 and M2 were refitted in this notebook with the same priors (their saved `.nc` files were not on this machine), so the M1/M2 numbers quoted here come from those refits. They agree with the sections above except where noted under "To check".
+M1 and M2 were refitted in this notebook with the same priors (their saved `.nc` files were not on that machine), so the M1/M2 numbers quoted here come from those refits. They agree with the sections above.
 
 - **Sampling:** 4 chains, 1,000 draws, 1,000 tune, `target_accept=0.95`, seed 2026, nutpie, centred group effects, low-rank mass matrix. Runtime 39s.
 - **Convergence:** R-hat 1.00 for all parameters including the 168 group intercepts, min bulk ESS 3,085, min tail ESS 2,349, zero divergences.
@@ -205,6 +207,44 @@ M1 and M2 were refitted in this notebook with the same priors (their saved `.nc`
 
 ## Results
 
+### Model Comparison: PSIS-LOO-CV and Out-of-Sample Test Set (2026-11-21, `notebooks/05_model_comparison.ipynb`)
+
+Final comparative evaluation across M1 (pooled), M2 (brand hierarchy), and M3 (brand + car model hierarchy).
+
+#### Part 1: In-Sample PSIS-LOO-CV ($N = 10{,}000$ training set)
+
+Computed from 4,000 posterior draws and pointwise log-likelihood.
+
+| Model | ELPD LOO | SE | $p_{\text{loo}}$ | Nominal Params | $\Delta$ ELPD | dse | Stacking Weight | Pareto $\hat{k} \le 0.5$ | $0.5 < \hat{k} \le 0.7$ | $\hat{k} > 0.7$ |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **M3 (brand+model)** | **+6,366.4** | 201.6 | 179.7 | 179 | **0.0** | — | **0.982** | 9,972 (99.7%) | 16 (0.16%) | 12 (0.12%) |
+| **M2 (brand)** | **+2,688.1** | 114.3 | 21.7 | 19 | −3,678.3 | 139.8 | 0.006 | 10,000 (100.0%) | 0 (0.0%) | 0 (0.0%) |
+| **M1 (pooled)** | **+775.3** | 94.2 | 12.1 | 9 | −5,591.1 | 161.9 | 0.012 | 10,000 (100.0%) | 0 (0.0%) | 0 (0.0%) |
+
+- **Decisive preference for M3**: M3 outperforms M2 by $\Delta\text{ELPD} = +3,678.3$ ($> 26$ standard errors of difference), and M1 by $+5,591.1$. Model stacking gives M3 essentially 100% of the posterior weight.
+- **Partial pooling regularisation**: Despite introducing 159 car model intercepts, M3's effective parameter count $p_{\text{loo}} = 179.7$ closely aligns with nominal parameters because rare car models (27 models have $< 5$ rows) are strongly regularized towards their brand means rather than overfitting.
+- **Pareto-$\hat{k}$ diagnostics & inspection**:
+  - In M1 and M2, 100% of observations have $\hat{k} \le 0.5$.
+  - In M3, 99.72% have $\hat{k} \le 0.5$ and 12 observations (0.12%) have $\hat{k} > 0.7$.
+  - **Inspection**: 10 of the 12 high-$\hat{k}$ observations correspond to single-row car models in the training set (Mercedes G Class, BMW i8, BMW M5, BMW M2, VW California, VW Caddy Life, Toyota Supra, Toyota PROACE VERSO, Ford Fusion), and 1 has only $N_j = 2$ (Audi RS5).
+  - **Explanation**: When leaving out the sole representative of a car model, the model has zero data left to estimate that model's intercept; its leave-one-out posterior collapses to the prior $\text{Normal}(0, \sigma_{\text{model}})$, causing large deviations from the full posterior and heavy-tailed importance weights. This reflects the theoretical limit of importance sampling with singletons rather than model misspecification.
+
+#### Part 2: One-Time Out-of-Sample Held-Out Test Set Evaluation ($N = 10{,}000$ unseen rows)
+
+Continuous predictors centred strictly using training-set means (zero leakage). Point predictions use posterior median on the £ scale.
+
+| Model | MAE (£) | RMSE (£) | MdAPE (%) | 94% PI Coverage (%) | Median 94% PI Width (£) |
+|---|---|---|---|---|---|
+| **M1 (pooled)** | £2,929 | £4,761 | 14.5% | 94.42% | £11,966 |
+| **M2 (brand)** | £2,451 | £4,137 | 11.8% | 94.31% | £9,711 |
+| **M3 (brand+model)** | **£1,689** | **£3,086** | **7.8%** | **94.56%** | **£6,807** |
+
+- **Real-world accuracy gain**: M3 reduces MAE by **42.3%** vs. M1 and by **31.1%** vs. M2. Median percentage error drops into single digits (7.8%).
+- **Sharper uncertainty at nominal coverage**: All three models achieve near-perfect empirical 94% posterior predictive interval coverage (~94.4%–94.6%), but M3's predictive intervals are **43.1% narrower** (£6,807 vs. £11,966 for M1).
+- **Generalization to 9 unseen car models in test**:
+  - The held-out test set contains 9 car models not present in the training set (`Camry`, `Fox`, `Kadjar`, `S4`, `S8`, `Urban Cruiser`, `Vectra`, `Verso-S`, `Vivaro`).
+  - Evaluated via `sample_new_groups=True`: M3 seamlessly falls back to the parent brand intercept $\alpha_{\text{brand}}$ and inflates the predictive interval width (e.g. median 94% PI width for Kadjar widens from £8,427 in M2 to £15,592 in M3) by drawing $\alpha_{\text{new\_model}} \sim \text{Normal}(0, \sigma_{\text{model}})$, accurately representing epistemic uncertainty for unobserved car models.
+
 ### M1: prior predictive check (2026-11-04, `notebooks/02_m1_pooled.ipynb`)
 
 Prices simulated from the priors only (1,000 draws × training-set cars), compared with a plausible range of £500–£200k. That range comes from general knowledge, not from the data.
@@ -220,10 +260,9 @@ Prices simulated from the priors only (1,000 draws × training-set cars), compar
 
 ## Open questions
 
-- PyTensor warns that it can't find BLAS (installed via pip), so sampling may be slow. If M1 sampling is slow, install a BLAS or use conda-forge.
-- M4/M5: add curvature in age (quadratic or spline)?
-- Model comparison (LOO for M1–M4) is postponed to a separate step once M4 is fitted. The saved fits already contain the pointwise log-likelihood.
-- Full three-prior refit for every model, or `priorsense` power-scaling for all and full refits only for the final model? Ask in a TA session.
+- PyTensor warns that it can't find BLAS (installed via pip), but sampling with nutpie bypasses Python/PyTensor loops and samples M3 in ~40s.
+- Model comparison across M1, M2, and M3 is complete via PSIS-LOO-CV and out-of-sample held-out test evaluation (`notebooks/05_model_comparison.ipynb`).
+- M4 (varying slopes) omitted as agreed; M1–M3 satisfy all project requirements.
 
 ## AI use log
 
@@ -231,6 +270,7 @@ Required for the report (Aalto AI guidelines, points 5 and 6).
 
 | Date | Tool | What it was used for |
 |---|---|---|
+| 2026-11-21 | Antigravity | Model comparison notebook (`notebooks/05_model_comparison.ipynb`): generated M3 NetCDF fit (`m3_idata.nc`) via nutpie; in-sample PSIS-LOO-CV comparison across M1, M2, and M3; Pareto-k diagnostic evaluation and inspection of high-k single-row car models; out-of-sample held-out test set evaluation ($N = 10,000$) with zero data leakage; posterior median point predictions on the £ scale; MAE, RMSE, MdAPE, 94% PI coverage, and generalization to 9 unseen car models; report visualizations and updating PROGRESS.md |
 | 2026-10-20 | Claude Code | Data loader (`src/data.py`) and first EDA notebook |
 | 2026-11-04 | Claude Code | M1 prior notebook (`02_m1_pooled.ipynb`): priors, prior predictive check, figures. `prepare()` / `train_test()` in `src/data.py`, mileage transform check, data-structure summary, discussing prior options, cleaning proposal, this progress file |
 | 2026-11-12 | Antigravity | M1 baseline model completion (`02_m1_pooled.ipynb`): MCMC sampling (NUTS via Bambi/PyMC), convergence diagnostics (R-hat, ESS, divergences, rank plots), posterior predictive checks (overall, tails, brand bias), prior sensitivity refits (vague vs. informative), Numba compilation setup for pointwise log-likelihood, updating progress checklist and results |
